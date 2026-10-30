@@ -112,6 +112,24 @@ GET /api/products?search=laptop&currency=usd&min_price=100&max_price=2000&sort=-
 }
 ```
 
+También se pueden registrar sus precios en otras divisas en la misma petición, de forma atómica:
+
+```json
+{
+  "name": "Laptop",
+  "price": 1200.50,
+  "currency_id": 1,
+  "tax_cost": 228.10,
+  "manufacturing_cost": 800,
+  "prices": [
+    { "currency_id": 2, "price": 4800000 },
+    { "currency_id": 3 }
+  ]
+}
+```
+
+`prices` es opcional (hasta 20 elementos). Cada `currency_id` debe existir, no repetirse y ser distinto de la divisa base; si se omite `price`, se calcula con las tasas de cambio. La respuesta 201 incluye el producto con su divisa y sus precios.
+
 ### Registrar precio en otra divisa
 
 ```json
@@ -152,7 +170,7 @@ La colección de Postman está en `docs/products-api.postman_collection.json`. L
 php artisan test
 ```
 
-Cubren autenticación, autorización por rol (403 para viewer en acciones de escritura), CRUD de productos y divisas, validaciones (incluida la normalización del código de divisa y la tasa mayor que 0), 404, registro de precios (manual y calculado), divisas duplicadas, filtros, búsqueda y orden del listado (incluidos sus 422 y los enlaces de paginación), borrado lógico, listado de eliminados, restauración y borrado definitivo (con su cascada y sus 409), y el 409 al eliminar una divisa en uso, incluso si solo la usan productos eliminados.
+Cubren autenticación, autorización por rol (403 para viewer en acciones de escritura), CRUD de productos y divisas, validaciones (incluida la normalización del código de divisa y la tasa mayor que 0), 404, registro de precios (manual y calculado), creación de un producto con sus precios en una sola petición (validaciones y rollback de la transacción), divisas duplicadas, filtros, búsqueda y orden del listado (incluidos sus 422 y los enlaces de paginación), borrado lógico, listado de eliminados, restauración y borrado definitivo (con su cascada y sus 409), y el 409 al eliminar una divisa en uso, incluso si solo la usan productos eliminados.
 
 ## Decisiones de diseño
 
@@ -164,6 +182,7 @@ Cubren autenticación, autorización por rol (403 para viewer en acciones de esc
 - **Cambio de tasa:** actualizar el `exchange_rate` de una divisa no recalcula los precios ya registrados.
 - **Filtros del listado:** se implementan como local scopes de `Product` (`#[Scope]`: `search`, `ofCurrency`, `priceBetween`, `sortBy` y `filter`, que los combina), compartidos por el listado y por `trashed`. `sort` usa una lista blanca (`Product::SORTABLE`) y desempata por `id` para que la paginación sea estable.
 - **Búsqueda portable:** `search` usa `whereLike(..., caseSensitive: false)` de Laravel, que genera `ilike` en PostgreSQL y `like` en MySQL y SQLite, así que no distingue mayúsculas en los tres motores. Limitaciones conocidas: `%` y `_` en el texto actúan como comodines (solo amplían los resultados; el valor siempre va como binding), y en SQLite la insensibilidad a mayúsculas aplica solo a caracteres ASCII.
+- **Creación atómica con precios:** la lógica vive en la clase de acción `App\Actions\CreateProductWithPrices`, que el controlador recibe por inyección. Crea el producto y sus precios dentro de `DB::transaction()`: si falla cualquier precio, no queda ni el producto ni ningún precio. La decisión "precio manual o calculado" está en un único lugar, `PriceConverter::priceFor()`, que usan tanto esta acción como `POST /api/products/{id}/prices`.
 - **Montos:** columnas `decimal(12,2)` para dinero y `decimal(18,6)` para la tasa de cambio, para evitar errores de precisión de los `float`.
 
 ## Seguridad
@@ -197,6 +216,7 @@ Cubren autenticación, autorización por rol (403 para viewer en acciones de esc
 
 ```
 app/
+├── Actions/               CreateProductWithPrices (creación atómica de producto y precios)
 ├── Enums/                 UserRole (admin, viewer)
 ├── Http/
 │   ├── Controllers/Api/   AuthController, CurrencyController, ProductController, ProductPriceController

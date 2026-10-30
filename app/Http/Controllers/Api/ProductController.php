@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Actions\CreateProductWithPrices;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\IndexProductRequest;
 use App\Http\Requests\StoreProductRequest;
@@ -36,10 +37,9 @@ class ProductController extends Controller implements HasMiddleware
         return $this->listing(Product::query(), $request, 'id');
     }
 
-    public function store(StoreProductRequest $request): JsonResponse
+    public function store(StoreProductRequest $request, CreateProductWithPrices $action): JsonResponse
     {
-        $product = Product::create($request->validated());
-        $product->load('currency');
+        $product = $action->handle($request->validated());
 
         return (new ProductResource($product))
             ->response()

@@ -36,11 +36,9 @@ class ProductPriceController extends Controller implements HasMiddleware
         $data = $request->validated();
         $target = Currency::findOrFail($data['currency_id']);
 
-        $price = $data['price'] ?? $converter->convert($product->price, $product->currency, $target);
-
         $productPrice = $product->prices()->create([
             'currency_id' => $target->id,
-            'price' => $price,
+            'price' => $converter->priceFor($product, $target, $data['price'] ?? null),
         ]);
         $productPrice->load('currency');
 
