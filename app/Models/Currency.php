@@ -28,4 +28,9 @@ class Currency extends Model
     {
         return $this->hasMany(ProductPrice::class);
     }
+
+    public function isInUse(): bool
+    {
+        return $this->products()->exists() || $this->productPrices()->exists();
+    }
 }

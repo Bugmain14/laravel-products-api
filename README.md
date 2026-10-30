@@ -37,7 +37,7 @@ El seeder crea las divisas USD, COP, EUR y MXN, 10 productos de ejemplo y estos 
 
 ## Autenticación
 
-Todos los endpoints de productos requieren un token Bearer.
+Todos los endpoints de productos y divisas requieren un token Bearer.
 
 ```http
 POST /api/login
@@ -72,6 +72,11 @@ Accept: application/json
 | DELETE | `/api/products/{id}` | Eliminar producto y sus precios |
 | GET | `/api/products/{id}/prices` | Listar precios del producto |
 | POST | `/api/products/{id}/prices` | Registrar precio en otra divisa |
+| GET | `/api/currencies` | Listar divisas (sin paginar, ordenadas por `name`) |
+| POST | `/api/currencies` | Crear divisa |
+| GET | `/api/currencies/{id}` | Obtener una divisa |
+| PUT | `/api/currencies/{id}` | Actualizar divisa (actualización parcial permitida) |
+| DELETE | `/api/currencies/{id}` | Eliminar divisa (409 si está en uso) |
 
 ### Crear producto
 
@@ -94,16 +99,25 @@ Accept: application/json
 
 `price` es opcional. Si no se envía, se calcula con las tasas de cambio (ver Decisiones de diseño).
 
+### Crear divisa
+
+```json
+{ "name": "COP", "symbol": "$", "exchange_rate": 4000 }
+```
+
+`name` es un código ISO 4217 de 3 letras; se normaliza a mayúsculas antes de validar (`cop` → `COP`). `exchange_rate` debe ser mayor que 0, con hasta 6 decimales.
+
 ### Códigos de respuesta
 
 | Código | Caso |
 |---|---|
 | 200 | Consulta o actualización exitosa |
 | 201 | Recurso creado |
-| 204 | Producto eliminado |
+| 204 | Producto o divisa eliminados |
 | 401 | Sin token o token inválido |
 | 403 | El rol del usuario no permite la acción |
 | 404 | Recurso no encontrado |
+| 409 | La divisa está en uso por productos o precios y no se puede eliminar |
 | 422 | Error de validación |
 | 429 | Demasiadas peticiones |
 
@@ -117,19 +131,20 @@ La colección de Postman está en `docs/products-api.postman_collection.json`. L
 php artisan test
 ```
 
-Cubren autenticación, autorización por rol (403 para viewer en acciones de escritura), CRUD de productos, validaciones, 404, registro de precios (manual y calculado), divisas duplicadas y eliminación en cascada.
+Cubren autenticación, autorización por rol (403 para viewer en acciones de escritura), CRUD de productos y divisas, validaciones (incluida la normalización del código de divisa y la tasa mayor que 0), 404, registro de precios (manual y calculado), divisas duplicadas, eliminación en cascada y el 409 al eliminar una divisa en uso.
 
 ## Decisiones de diseño
 
 - **Tasa de cambio:** `exchange_rate` indica cuántas unidades de la divisa equivalen a 1 unidad de la divisa de referencia (USD = 1). Para convertir de la divisa A a la B: `precio / tasa_A × tasa_B`, redondeado a 2 decimales.
 - **Precio en otra divisa:** si se envía `price`, se respeta ese valor (precio comercial definido por el negocio). Si no, se calcula a partir del precio base y las tasas de cambio.
 - **Un precio por divisa:** un producto no puede tener dos precios en la misma divisa (índice único `product_id + currency_id` y validación con respuesta 422).
-- **Eliminación:** al eliminar un producto se eliminan sus precios (`cascadeOnDelete`). Una divisa en uso no se puede eliminar (`restrictOnDelete`).
+- **Eliminación:** al eliminar un producto se eliminan sus precios (`cascadeOnDelete`). Una divisa en uso por productos o precios no se puede eliminar: la API lo comprueba antes y responde 409 en JSON, y la llave foránea (`restrictOnDelete`) actúa como respaldo; si se viola por una condición de carrera, también se responde 409 en lugar de 500.
+- **Cambio de tasa:** actualizar el `exchange_rate` de una divisa no recalcula los precios ya registrados.
 - **Montos:** columnas `decimal(12,2)` para dinero y `decimal(18,6)` para la tasa de cambio, para evitar errores de precisión de los `float`.
 
 ## Seguridad
 
-- Autenticación con Laravel Sanctum en todos los endpoints de productos.
+- Autenticación con Laravel Sanctum en todos los endpoints de productos y divisas.
 - Autorización por roles (`App\Enums\UserRole`, columna `role` en `users`, por defecto `viewer`):
 
   | Acción | admin | viewer |
@@ -137,8 +152,10 @@ Cubren autenticación, autorización por rol (403 para viewer en acciones de esc
   | Listar y ver productos y sus precios | ✓ | ✓ |
   | Crear, actualizar y eliminar productos | ✓ | 403 |
   | Registrar precios en otra divisa | ✓ | 403 |
+  | Listar y ver divisas | ✓ | ✓ |
+  | Crear, actualizar y eliminar divisas | ✓ | 403 |
 
-- Las reglas viven en `ProductPolicy` y se aplican con el middleware `can` declarado en cada controlador (`HasMiddleware`). El middleware corre antes que los Form Requests, así que un usuario sin permiso recibe 403 y nunca ve los errores de validación (422).
+- Las reglas viven en `ProductPolicy` y `CurrencyPolicy` y se aplican con el middleware `can` declarado en cada controlador (`HasMiddleware`). El middleware corre antes que los Form Requests, así que un usuario sin permiso recibe 403 y nunca ve los errores de validación (422).
 - `role` no está en `$fillable`: no se puede asignar en masa desde una petición, lo que evita la escalada de privilegios.
 - Límite de peticiones: 5 intentos de login por minuto y 60 peticiones por minuto en la API.
 - Validación de todas las entradas con Form Requests (tipos, rangos, decimales y existencia de llaves foráneas).
@@ -157,11 +174,11 @@ Cubren autenticación, autorización por rol (403 para viewer en acciones de esc
 app/
 ├── Enums/                 UserRole (admin, viewer)
 ├── Http/
-│   ├── Controllers/Api/   AuthController, ProductController, ProductPriceController
+│   ├── Controllers/Api/   AuthController, CurrencyController, ProductController, ProductPriceController
 │   ├── Requests/          Validaciones (Store/Update)
 │   └── Resources/         Formato de las respuestas JSON
 ├── Models/                Currency, Product, ProductPrice, User
-├── Policies/              ProductPolicy (permisos por rol)
+├── Policies/              CurrencyPolicy, ProductPolicy (permisos por rol)
 └── Services/              PriceConverter (conversión entre divisas)
 database/
 ├── factories/
