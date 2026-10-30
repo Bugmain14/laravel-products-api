@@ -61,6 +61,45 @@ class ProductPriceApiTest extends TestCase
             ->assertJsonValidationErrors(['currency_id']);
     }
 
+    public function test_it_rejects_a_price_in_the_base_currency(): void
+    {
+        $this->postJson("/api/products/{$this->product->id}/prices", [
+            'currency_id' => $this->usd->id,
+            'price' => 100,
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['currency_id' => "The price currency must be different from the product's base currency."]);
+    }
+
+    public function test_it_converts_large_amounts_to_cop_beyond_the_product_price_range(): void
+    {
+        $product = Product::factory()->create(['currency_id' => $this->usd->id, 'price' => '9999999999.99']);
+
+        $this->postJson("/api/products/{$product->id}/prices", ['currency_id' => $this->cop->id])
+            ->assertCreated()
+            ->assertJsonPath('data.price', '39999999999960.00')
+            ->assertJsonPath('data.origin', 'calculated');
+
+        $this->assertDatabaseHas('product_prices', ['product_id' => $product->id, 'price' => '39999999999960.00']);
+    }
+
+    public function test_manual_prices_accept_the_wider_range_of_product_prices(): void
+    {
+        $this->postJson("/api/products/{$this->product->id}/prices", [
+            'currency_id' => $this->cop->id,
+            'price' => '39999999999960.00',
+        ])->assertCreated()
+            ->assertJsonPath('data.price', '39999999999960.00')
+            ->assertJsonPath('data.origin', 'manual');
+
+        $other = Product::factory()->create(['currency_id' => $this->usd->id]);
+
+        $this->postJson("/api/products/{$other->id}/prices", [
+            'currency_id' => $this->cop->id,
+            'price' => '10000000000000000.00',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['price']);
+    }
+
     public function test_it_lists_the_prices_of_a_product(): void
     {
         $this->product->prices()->create(['currency_id' => $this->cop->id, 'price' => 400000]);

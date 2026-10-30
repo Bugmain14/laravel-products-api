@@ -13,6 +13,7 @@ class ProductPriceResource extends JsonResource
             'id' => $this->id,
             'product_id' => $this->product_id,
             'price' => $this->price,
+            'origin' => $this->origin,
             'currency' => new CurrencyResource($this->whenLoaded('currency')),
             'created_at' => $this->created_at?->toIso8601String(),
         ];

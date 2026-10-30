@@ -15,6 +15,7 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
+use Illuminate\Support\Facades\DB;
 
 class ProductController extends Controller implements HasMiddleware
 {
@@ -55,7 +56,7 @@ class ProductController extends Controller implements HasMiddleware
 
     public function update(UpdateProductRequest $request, Product $product): ProductResource
     {
-        $product->update($request->validated());
+        DB::transaction(fn () => $product->update($request->validated()));
         $product->load('currency');
 
         return new ProductResource($product);

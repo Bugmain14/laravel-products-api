@@ -6,6 +6,7 @@ use App\Models\Currency;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\PriceConverter;
+use App\ValueObjects\ResolvedPrice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use RuntimeException;
@@ -124,7 +125,7 @@ class ProductCreateWithPricesTest extends TestCase
         {
             private int $calls = 0;
 
-            public function priceFor(Product $product, Currency $target, int|float|string|null $manual = null): string
+            public function priceFor(Product $product, Currency $target, int|float|string|null $manual = null): ResolvedPrice
             {
                 if (++$this->calls === 2) {
                     throw new RuntimeException('Simulated price failure.');

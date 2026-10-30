@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\AmountRules;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -19,10 +20,10 @@ class StoreProductRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
-            'price' => ['required', 'numeric', 'min:0', 'max:9999999999.99', 'decimal:0,2'],
+            'price' => ['required', ...AmountRules::money()],
             'currency_id' => ['required', 'integer', 'exists:currencies,id'],
-            'tax_cost' => ['required', 'numeric', 'min:0', 'max:9999999999.99', 'decimal:0,2'],
-            'manufacturing_cost' => ['required', 'numeric', 'min:0', 'max:9999999999.99', 'decimal:0,2'],
+            'tax_cost' => ['required', ...AmountRules::money()],
+            'manufacturing_cost' => ['required', ...AmountRules::money()],
             'prices' => ['sometimes', 'array', 'max:20'],
             'prices.*' => ['required', 'array:currency_id,price'],
             'prices.*.currency_id' => [
@@ -32,7 +33,7 @@ class StoreProductRequest extends FormRequest
                 'exists:currencies,id',
                 Rule::when(is_scalar($baseCurrency), fn () => [Rule::notIn([$baseCurrency])]),
             ],
-            'prices.*.price' => ['nullable', 'numeric', 'min:0', 'max:9999999999.99', 'decimal:0,2'],
+            'prices.*.price' => ['nullable', ...AmountRules::currencyPrice()],
         ];
     }
 

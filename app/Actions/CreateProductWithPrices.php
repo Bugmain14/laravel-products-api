@@ -27,7 +27,7 @@ class CreateProductWithPrices
 
                 $product->prices()->create([
                     'currency_id' => $target->id,
-                    'price' => $this->converter->priceFor($product, $target, $price['price'] ?? null),
+                    ...$this->converter->priceFor($product, $target, $price['price'] ?? null)->toAttributes(),
                 ]);
             }
 

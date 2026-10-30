@@ -38,7 +38,7 @@ class ProductPriceController extends Controller implements HasMiddleware
 
         $productPrice = $product->prices()->create([
             'currency_id' => $target->id,
-            'price' => $converter->priceFor($product, $target, $data['price'] ?? null),
+            ...$converter->priceFor($product, $target, $data['price'] ?? null)->toAttributes(),
         ]);
         $productPrice->load('currency');
 
