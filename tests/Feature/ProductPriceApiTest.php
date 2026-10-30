@@ -30,7 +30,7 @@ class ProductPriceApiTest extends TestCase
             'price' => 100,
         ]);
 
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs(User::factory()->admin()->create());
     }
 
     public function test_it_creates_a_price_with_a_manual_amount(): void

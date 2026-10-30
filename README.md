@@ -13,25 +13,27 @@ API RESTful en Laravel para gestionar productos y sus precios en diferentes divi
 ## Instalación
 
 ```bash
-git clone <url-del-repositorio>
-cd products-api
+git clone https://github.com/Bugmain14/laravel-products-api.git
+cd laravel-products-api
 composer install
 cp .env.example .env
 php artisan key:generate
 ```
 
 Configura la base de datos en `.env` y luego:
+Por defecto usa SQLite; si `php artisan migrate` pregunta si desea crear el archivo de la base de datos, responda `yes`.
 
 ```bash
 php artisan migrate --seed
 php artisan serve
 ```
 
-El seeder crea las divisas USD, COP, EUR y MXN, 10 productos de ejemplo y este usuario:
+El seeder crea las divisas USD, COP, EUR y MXN, 10 productos de ejemplo y estos usuarios:
 
-| Email | Password |
-|---|---|
-| admin@example.com | password |
+| Email | Password | Rol |
+|---|---|---|
+| admin@example.com | password | admin |
+| viewer@example.com | password | viewer |
 
 ## Autenticación
 
@@ -100,6 +102,7 @@ Accept: application/json
 | 201 | Recurso creado |
 | 204 | Producto eliminado |
 | 401 | Sin token o token inválido |
+| 403 | El rol del usuario no permite la acción |
 | 404 | Recurso no encontrado |
 | 422 | Error de validación |
 | 429 | Demasiadas peticiones |
@@ -114,7 +117,7 @@ La colección de Postman está en `docs/products-api.postman_collection.json`. L
 php artisan test
 ```
 
-Cubren autenticación, CRUD de productos, validaciones, 404, registro de precios (manual y calculado), divisas duplicadas y eliminación en cascada.
+Cubren autenticación, autorización por rol (403 para viewer en acciones de escritura), CRUD de productos, validaciones, 404, registro de precios (manual y calculado), divisas duplicadas y eliminación en cascada.
 
 ## Decisiones de diseño
 
@@ -127,6 +130,16 @@ Cubren autenticación, CRUD de productos, validaciones, 404, registro de precios
 ## Seguridad
 
 - Autenticación con Laravel Sanctum en todos los endpoints de productos.
+- Autorización por roles (`App\Enums\UserRole`, columna `role` en `users`, por defecto `viewer`):
+
+  | Acción | admin | viewer |
+  |---|---|---|
+  | Listar y ver productos y sus precios | ✓ | ✓ |
+  | Crear, actualizar y eliminar productos | ✓ | 403 |
+  | Registrar precios en otra divisa | ✓ | 403 |
+
+- Las reglas viven en `ProductPolicy` y se aplican con el middleware `can` declarado en cada controlador (`HasMiddleware`). El middleware corre antes que los Form Requests, así que un usuario sin permiso recibe 403 y nunca ve los errores de validación (422).
+- `role` no está en `$fillable`: no se puede asignar en masa desde una petición, lo que evita la escalada de privilegios.
 - Límite de peticiones: 5 intentos de login por minuto y 60 peticiones por minuto en la API.
 - Validación de todas las entradas con Form Requests (tipos, rangos, decimales y existencia de llaves foráneas).
 - Protección contra asignación masiva con `$fillable`.
@@ -142,11 +155,13 @@ Cubren autenticación, CRUD de productos, validaciones, 404, registro de precios
 
 ```
 app/
+├── Enums/                 UserRole (admin, viewer)
 ├── Http/
 │   ├── Controllers/Api/   AuthController, ProductController, ProductPriceController
 │   ├── Requests/          Validaciones (Store/Update)
 │   └── Resources/         Formato de las respuestas JSON
-├── Models/                Currency, Product, ProductPrice
+├── Models/                Currency, Product, ProductPrice, User
+├── Policies/              ProductPolicy (permisos por rol)
 └── Services/              PriceConverter (conversión entre divisas)
 database/
 ├── factories/

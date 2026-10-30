@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Enums\UserRole;
 use App\Models\Currency;
 use App\Models\Product;
 use App\Models\User;
@@ -15,7 +16,12 @@ class DatabaseSeeder extends Seeder
 
         User::updateOrCreate(
             ['email' => 'admin@example.com'],
-            ['name' => 'Admin', 'password' => bcrypt('password')]
+            ['name' => 'Admin', 'password' => bcrypt('password'), 'role' => UserRole::Admin]
+        );
+
+        User::updateOrCreate(
+            ['email' => 'viewer@example.com'],
+            ['name' => 'Viewer', 'password' => bcrypt('password'), 'role' => UserRole::Viewer]
         );
 
         $usd = Currency::where('name', 'USD')->first();

@@ -24,7 +24,7 @@ class ProductApiTest extends TestCase
 
     private function authenticate(): void
     {
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs(User::factory()->admin()->create());
     }
 
     public function test_guests_cannot_access_products(): void

@@ -11,9 +11,19 @@ use App\Services\PriceConverter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class ProductPriceController extends Controller
+class ProductPriceController extends Controller implements HasMiddleware
 {
+    public static function middleware(): array
+    {
+        return [
+            new Middleware('can:view,product', only: ['index']),
+            new Middleware('can:createPrice,product', only: ['store']),
+        ];
+    }
+
     public function index(Product $product): AnonymousResourceCollection
     {
         $prices = $product->prices()->with('currency')->orderBy('id')->get();
