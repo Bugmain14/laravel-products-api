@@ -1,29 +1,54 @@
 {
   "info": {
+    "_postman_id": "5b0d6f3e-8c2a-4f61-9d3e-1a7c4b2e9f10",
     "name": "Products API",
-    "description": "API RESTful de productos con precios en múltiples divisas (Laravel + Sanctum).\n\n1. Ejecuta **Auth / Login**: guarda el token automáticamente en la variable `token`.\n2. Todas las demás peticiones usan `Bearer {{token}}`.",
+    "description": "API RESTful en Laravel 12 para gestionar productos, divisas y precios de productos en distintas divisas.\n\n**Orden recomendado**\n1. Ejecuta **Auth / Login (admin)**: guarda el token en la variable `token`. Todas las demás peticiones lo envían como `Authorization: Bearer {{token}}` (autenticación definida en la colección).\n2. Recorre las carpetas en orden: Products, Product prices, Currencies. Las peticiones de creación guardan el id creado en su variable.\n3. Para comprobar los 403, ejecuta **Login (viewer)** y repite una acción de escritura; después vuelve a **Login (admin)**.\n\n**Variables de la colección**\n- `base_url`: URL base de la API (por defecto `http://127.0.0.1:8000/api`).\n- `token`: token Bearer; lo guardan las peticiones de login.\n- `product_id`: producto de trabajo; lo guardan las peticiones de creación de productos.\n- `currency_id`: divisa de trabajo; lo guarda **Create currency**.\n- `price_id`: precio de trabajo; lo guardan las peticiones de creación de precios.\n\nLos ids y los bodies de ejemplo corresponden a los datos del seeder: divisas USD (1), COP (2), EUR (3) y MXN (4), y 10 productos en USD.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
   },
   "variable": [
     {
       "key": "base_url",
-      "value": "http://127.0.0.1:8000/api"
+      "value": "http://127.0.0.1:8000/api",
+      "type": "string"
     },
     {
       "key": "token",
-      "value": ""
+      "value": "",
+      "type": "string"
     },
     {
       "key": "product_id",
-      "value": "1"
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "currency_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "price_id",
+      "value": "1",
+      "type": "string"
     }
   ],
   "item": [
     {
       "name": "Auth",
+      "description": "Obtención y revocación del token Bearer de Sanctum.",
       "item": [
         {
-          "name": "Login",
+          "name": "Login (admin)",
           "request": {
             "method": "POST",
             "header": [
@@ -45,12 +70,13 @@
                 "login"
               ]
             },
+            "description": "Obtiene un token Bearer con el usuario admin y lo guarda en la variable `token`.\n\n**Rol:** público.\n\n**Respuestas:** 200 token · 422 credenciales incorrectas o datos inválidos · 429 demasiados intentos (5 por minuto por email e IP).",
             "auth": {
               "type": "noauth"
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password\",\n  \"device_name\": \"postman\"\n}",
+              "raw": "{\n    \"email\": \"admin@example.com\",\n    \"password\": \"password\",\n    \"device_name\": \"postman\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -64,16 +90,17 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const json = pm.response.json();",
-                  "if (json.token) { pm.collectionVariables.set('token', json.token); }",
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('token', pm.response.json().token);",
+                  "}"
                 ]
               }
             }
           ]
         },
         {
-          "name": "Logout",
+          "name": "Login (viewer)",
           "request": {
             "method": "POST",
             "header": [
@@ -87,6 +114,54 @@
               }
             ],
             "url": {
+              "raw": "{{base_url}}/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "login"
+              ]
+            },
+            "description": "Obtiene un token con el usuario viewer y **reemplaza** la variable `token`. Úsalo para comprobar los 403 en las acciones de escritura; luego vuelve a ejecutar **Login (admin)**.\n\n**Rol:** público.\n\n**Respuestas:** 200 token · 422 credenciales incorrectas o datos inválidos · 429 demasiados intentos.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"viewer@example.com\",\n    \"password\": \"password\",\n    \"device_name\": \"postman\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('token', pm.response.json().token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
               "raw": "{{base_url}}/logout",
               "host": [
                 "{{base_url}}"
@@ -95,27 +170,85 @@
                 "logout"
               ]
             },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{token}}",
-                  "type": "string"
-                }
-              ]
-            }
+            "description": "Revoca el token actual. Después hay que volver a hacer login.\n\n**Rol:** cualquier usuario autenticado.\n\n**Respuestas:** 204 token revocado · 401 sin token o token inválido."
           }
         }
       ]
     },
     {
       "name": "Products",
+      "description": "CRUD de productos, filtros del listado y papelera (borrado lógico, restauración y borrado definitivo).",
       "item": [
         {
           "name": "List products",
           "request": {
             "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/products",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Página.",
+                  "disabled": true
+                },
+                {
+                  "key": "per_page",
+                  "value": "15",
+                  "description": "Resultados por página, entre 1 y 100 (por defecto 15).",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "laptop",
+                  "description": "Coincidencia parcial en name o description, sin distinguir mayúsculas.",
+                  "disabled": true
+                },
+                {
+                  "key": "currency",
+                  "value": "usd",
+                  "description": "Código de la divisa base, sin distinguir mayúsculas.",
+                  "disabled": true
+                },
+                {
+                  "key": "min_price",
+                  "value": "100",
+                  "description": "Precio mínimo (incluido).",
+                  "disabled": true
+                },
+                {
+                  "key": "max_price",
+                  "value": "2000",
+                  "description": "Precio máximo (incluido); debe ser >= min_price.",
+                  "disabled": true
+                },
+                {
+                  "key": "sort",
+                  "value": "-price",
+                  "description": "name, price o created_at; prefijo - para descendente.",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lista paginada de productos activos con su divisa base. Los filtros están incluidos pero desactivados: actívalos en la pestaña **Params**. Los enlaces de paginación conservan los filtros.\n\n**Rol:** cualquier usuario autenticado.\n\n**Respuestas:** 200 listado · 401 sin token · 422 parámetros inválidos."
+          }
+        },
+        {
+          "name": "Create product with prices",
+          "request": {
+            "method": "POST",
             "header": [
               {
                 "key": "Accept",
@@ -127,25 +260,39 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/products?page=1&per_page=15",
+              "raw": "{{base_url}}/products",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
-                "products?page=1&per_page=15"
+                "products"
               ]
             },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{token}}",
-                  "type": "string"
+            "description": "Crea un producto en USD junto con sus precios en otras divisas, en una sola transacción: COP con precio manual y EUR calculado con las tasas de cambio. Guarda el id en `product_id`.\n\n**Rol:** admin.\n\n**Respuestas:** 201 producto con su divisa y sus precios · 401 sin token · 403 no es admin · 422 datos inválidos (divisa repetida, igual a la base o inexistente).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Laptop Lenovo ThinkPad X1\",\n    \"description\": \"Portátil empresarial de 14 pulgadas con 32 GB de RAM.\",\n    \"price\": 1450.0,\n    \"currency_id\": 1,\n    \"tax_cost\": 275.5,\n    \"manufacturing_cost\": 900.0,\n    \"prices\": [\n        {\n            \"currency_id\": 2,\n            \"price\": 5800000\n        },\n        {\n            \"currency_id\": 3\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('product_id', pm.response.json().data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Create product",
@@ -170,19 +317,10 @@
                 "products"
               ]
             },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{token}}",
-                  "type": "string"
-                }
-              ]
-            },
+            "description": "Crea un producto en USD sin precios en otras divisas. Guarda el id en `product_id`, que usan las peticiones siguientes y la carpeta **Product prices**.\n\n**Rol:** admin.\n\n**Respuestas:** 201 producto creado · 401 sin token · 403 no es admin · 422 datos inválidos.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Laptop\",\n  \"description\": \"Business laptop\",\n  \"price\": 1200.5,\n  \"currency_id\": 1,\n  \"tax_cost\": 228.1,\n  \"manufacturing_cost\": 800\n}",
+              "raw": "{\n    \"name\": \"Monitor Dell 27\\\"\",\n    \"description\": \"Monitor QHD de 27 pulgadas.\",\n    \"price\": 320.0,\n    \"currency_id\": 1,\n    \"tax_cost\": 60.8,\n    \"manufacturing_cost\": 190.0\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -196,25 +334,22 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const json = pm.response.json();",
-                  "if (json.data && json.data.id) { pm.collectionVariables.set('product_id', json.data.id); }",
-                  "pm.test('Status 201', () => pm.response.to.have.status(201));"
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('product_id', pm.response.json().data.id);",
+                  "}"
                 ]
               }
             }
           ]
         },
         {
-          "name": "Get product",
+          "name": "Show product",
           "request": {
             "method": "GET",
             "header": [
               {
                 "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Content-Type",
                 "value": "application/json"
               }
             ],
@@ -228,16 +363,7 @@
                 "{{product_id}}"
               ]
             },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{token}}",
-                  "type": "string"
-                }
-              ]
-            }
+            "description": "Devuelve el producto `product_id` con su divisa base y sus precios en otras divisas.\n\n**Rol:** cualquier usuario autenticado.\n\n**Respuestas:** 200 producto · 401 sin token · 404 no existe o está eliminado."
           }
         },
         {
@@ -264,19 +390,10 @@
                 "{{product_id}}"
               ]
             },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{token}}",
-                  "type": "string"
-                }
-              ]
-            },
+            "description": "Actualización parcial. Si cambia `price` o `currency_id`, sus precios calculados se recalculan en segundo plano (requiere `php artisan queue:work`). Si la nueva divisa base tiene un precio calculado del producto, se elimina; si tiene uno manual, responde 422.\n\n**Rol:** admin.\n\n**Respuestas:** 200 producto actualizado · 401 sin token · 403 no es admin · 404 no existe o está eliminado · 422 datos inválidos o precio manual en la nueva divisa base.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Laptop Pro\",\n  \"price\": 1350\n}",
+              "raw": "{\n    \"name\": \"Monitor Dell 27\\\" QHD\",\n    \"price\": 299.99\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -293,10 +410,6 @@
               {
                 "key": "Accept",
                 "value": "application/json"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
               }
             ],
             "url": {
@@ -309,34 +422,137 @@
                 "{{product_id}}"
               ]
             },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{token}}",
-                  "type": "string"
-                }
-              ]
-            }
+            "description": "Borrado lógico: el producto deja de aparecer en el listado, en el detalle y en sus precios, pero sus precios se conservan para poder restaurarlo.\n\n**Rol:** admin.\n\n**Respuestas:** 204 eliminado · 401 sin token · 403 no es admin · 404 no existe o ya está eliminado."
           }
-        }
-      ]
-    },
-    {
-      "name": "Product prices",
-      "item": [
+        },
         {
-          "name": "List product prices",
+          "name": "List trashed products",
           "request": {
             "method": "GET",
             "header": [
               {
                 "key": "Accept",
                 "value": "application/json"
-              },
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/products/trashed",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "products",
+                "trashed"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Página.",
+                  "disabled": true
+                },
+                {
+                  "key": "per_page",
+                  "value": "15",
+                  "description": "Resultados por página, entre 1 y 100 (por defecto 15).",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "laptop",
+                  "description": "Coincidencia parcial en name o description, sin distinguir mayúsculas.",
+                  "disabled": true
+                },
+                {
+                  "key": "currency",
+                  "value": "usd",
+                  "description": "Código de la divisa base, sin distinguir mayúsculas.",
+                  "disabled": true
+                },
+                {
+                  "key": "min_price",
+                  "value": "100",
+                  "description": "Precio mínimo (incluido).",
+                  "disabled": true
+                },
+                {
+                  "key": "max_price",
+                  "value": "2000",
+                  "description": "Precio máximo (incluido); debe ser >= min_price.",
+                  "disabled": true
+                },
+                {
+                  "key": "sort",
+                  "value": "-price",
+                  "description": "name, price o created_at; prefijo - para descendente.",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lista paginada de productos eliminados lógicamente, con el mismo formato y los mismos filtros (desactivados) que el listado. Por defecto, los eliminados más recientemente primero.\n\n**Rol:** admin.\n\n**Respuestas:** 200 listado · 401 sin token · 403 no es admin · 422 parámetros inválidos."
+          }
+        },
+        {
+          "name": "Restore product",
+          "request": {
+            "method": "POST",
+            "header": [
               {
-                "key": "Content-Type",
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/products/{{product_id}}/restore",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "products",
+                "{{product_id}}",
+                "restore"
+              ]
+            },
+            "description": "Restaura el producto `product_id`, eliminado lógicamente, con sus precios.\n\n**Rol:** admin.\n\n**Respuestas:** 200 producto restaurado · 401 sin token · 403 no es admin · 404 no existe · 409 el producto no está eliminado."
+          }
+        },
+        {
+          "name": "Force delete product",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/products/{{product_id}}/force",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "products",
+                "{{product_id}}",
+                "force"
+              ]
+            },
+            "description": "Borra definitivamente el producto `product_id` y sus precios (cascada). Solo acepta productos eliminados: ejecuta antes **Delete product**. Si el producto está activo (por ejemplo, después de **Restore product**), responde 409.\n\n**Rol:** admin.\n\n**Respuestas:** 204 borrado definitivo · 401 sin token · 403 no es admin · 404 no existe · 409 el producto está activo."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Product prices",
+      "description": "Precios del producto `product_id` en divisas distintas a su divisa base.",
+      "item": [
+        {
+          "name": "List prices",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
                 "value": "application/json"
               }
             ],
@@ -351,20 +567,11 @@
                 "prices"
               ]
             },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{token}}",
-                  "type": "string"
-                }
-              ]
-            }
+            "description": "Lista los precios del producto `product_id` en otras divisas, con su divisa y su origen (`manual` o `calculated`).\n\n**Rol:** cualquier usuario autenticado.\n\n**Respuestas:** 200 listado · 401 sin token · 404 el producto no existe o está eliminado."
           }
         },
         {
-          "name": "Create price (manual amount)",
+          "name": "Create price (manual)",
           "request": {
             "method": "POST",
             "header": [
@@ -388,29 +595,34 @@
                 "prices"
               ]
             },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{token}}",
-                  "type": "string"
-                }
-              ]
-            },
+            "description": "Registra un precio manual en COP (id 2) para el producto `product_id`. Se guarda con origen `manual` y nunca se recalcula. Guarda el id en `price_id`.\n\n**Rol:** admin.\n\n**Respuestas:** 201 precio creado · 401 sin token · 403 no es admin · 404 el producto no existe · 422 divisa inválida, igual a la base o ya registrada para el producto.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"currency_id\": 3,\n  \"price\": 1099.99\n}",
+              "raw": "{\n    \"currency_id\": 2,\n    \"price\": 1250000\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('price_id', pm.response.json().data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "Create price (calculated from exchange rate)",
+          "name": "Create price (calculated)",
           "request": {
             "method": "POST",
             "header": [
@@ -434,25 +646,214 @@
                 "prices"
               ]
             },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{token}}",
-                  "type": "string"
-                }
-              ]
-            },
+            "description": "Registra un precio en EUR (id 3) sin enviar `price`: se calcula con las tasas de cambio y se guarda con origen `calculated`. Guarda el id en `price_id`.\n\n**Rol:** admin.\n\n**Respuestas:** 201 precio creado · 401 sin token · 403 no es admin · 404 el producto no existe · 422 divisa inválida, igual a la base o ya registrada para el producto.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"currency_id\": 2\n}",
+              "raw": "{\n    \"currency_id\": 3\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('price_id', pm.response.json().data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete price",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/products/{{product_id}}/prices/{{price_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "products",
+                "{{product_id}}",
+                "prices",
+                "{{price_id}}"
+              ]
+            },
+            "description": "Elimina el precio `price_id` del producto `product_id`. Sirve, por ejemplo, para quitar un precio manual en la divisa que se quiere usar como nueva divisa base.\n\n**Rol:** admin.\n\n**Respuestas:** 204 eliminado · 401 sin token · 403 no es admin · 404 el producto o el precio no existen, o el precio pertenece a otro producto."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Currencies",
+      "description": "CRUD de divisas. `exchange_rate` indica cuántas unidades de la divisa equivalen a 1 USD.",
+      "item": [
+        {
+          "name": "List currencies",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/currencies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "currencies"
+              ]
+            },
+            "description": "Lista todas las divisas, sin paginar y ordenadas por `name`.\n\n**Rol:** cualquier usuario autenticado.\n\n**Respuestas:** 200 listado · 401 sin token."
+          }
+        },
+        {
+          "name": "Show currency",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/currencies/{{currency_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "currencies",
+                "{{currency_id}}"
+              ]
+            },
+            "description": "Devuelve la divisa `currency_id`.\n\n**Rol:** cualquier usuario autenticado.\n\n**Respuestas:** 200 divisa · 401 sin token · 404 no existe."
+          }
+        },
+        {
+          "name": "Create currency",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/currencies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "currencies"
+              ]
+            },
+            "description": "Crea una divisa. `name` es un código ISO 4217 de 3 letras, único, y se normaliza a mayúsculas. `exchange_rate` son las unidades de la divisa por 1 USD (mayor que 0, hasta 6 decimales). Guarda el id en `currency_id`.\n\n**Rol:** admin.\n\n**Respuestas:** 201 divisa creada · 401 sin token · 403 no es admin · 422 datos inválidos o código duplicado.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"jpy\",\n    \"symbol\": \"¥\",\n    \"exchange_rate\": 151.5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('currency_id', pm.response.json().data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update currency",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/currencies/{{currency_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "currencies",
+                "{{currency_id}}"
+              ]
+            },
+            "description": "Actualización parcial de la divisa `currency_id`. Si cambia `exchange_rate`, se recalculan en segundo plano los precios calculados afectados (requiere `php artisan queue:work`).\n\n**Rol:** admin.\n\n**Respuestas:** 200 divisa actualizada · 401 sin token · 403 no es admin · 404 no existe · 422 datos inválidos.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"exchange_rate\": 152.25\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete currency",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/currencies/{{currency_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "currencies",
+                "{{currency_id}}"
+              ]
+            },
+            "description": "Elimina la divisa `currency_id` si no está en uso. Después de **Create currency** apunta a la divisa recién creada y responde 204; con una divisa en uso, como USD (id 1), responde 409.\n\n**Rol:** admin.\n\n**Respuestas:** 204 eliminada · 401 sin token · 403 no es admin · 404 no existe · 409 en uso por productos (incluidos los eliminados lógicamente) o por precios."
           }
         }
       ]
