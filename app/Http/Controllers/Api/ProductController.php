@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\IndexProductRequest;
 use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Http\Resources\ProductResource;
 use App\Models\Product;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -30,13 +31,9 @@ class ProductController extends Controller implements HasMiddleware
         ];
     }
 
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(IndexProductRequest $request): AnonymousResourceCollection
     {
-        $products = Product::with('currency')
-            ->latest('id')
-            ->paginate($this->perPage($request));
-
-        return ProductResource::collection($products);
+        return $this->listing(Product::query(), $request, 'id');
     }
 
     public function store(StoreProductRequest $request): JsonResponse
@@ -71,14 +68,9 @@ class ProductController extends Controller implements HasMiddleware
         return response()->noContent();
     }
 
-    public function trashed(Request $request): AnonymousResourceCollection
+    public function trashed(IndexProductRequest $request): AnonymousResourceCollection
     {
-        $products = Product::onlyTrashed()
-            ->with('currency')
-            ->latest('deleted_at')
-            ->paginate($this->perPage($request));
-
-        return ProductResource::collection($products);
+        return $this->listing(Product::onlyTrashed(), $request, 'deleted_at');
     }
 
     public function restore(Product $product): ProductResource
@@ -104,8 +96,15 @@ class ProductController extends Controller implements HasMiddleware
         return response()->noContent();
     }
 
-    private function perPage(Request $request): int
+    private function listing(Builder $query, IndexProductRequest $request, string $defaultSort): AnonymousResourceCollection
     {
-        return min(max((int) $request->query('per_page', 15), 1), 100);
+        $filters = $request->validated();
+
+        $products = $query->with('currency')
+            ->filter($filters, $defaultSort)
+            ->paginate((int) ($filters['per_page'] ?? 15))
+            ->withQueryString();
+
+        return ProductResource::collection($products);
     }
 }

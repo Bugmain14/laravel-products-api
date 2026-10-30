@@ -65,12 +65,12 @@ Accept: application/json
 |---|---|---|
 | POST | `/api/login` | Obtener token |
 | POST | `/api/logout` | Revocar el token actual |
-| GET | `/api/products` | Listar productos (paginado: `page`, `per_page` hasta 100) |
+| GET | `/api/products` | Listar productos (paginado, con filtros, búsqueda y orden) |
 | POST | `/api/products` | Crear producto |
 | GET | `/api/products/{id}` | Obtener un producto con sus precios |
 | PUT | `/api/products/{id}` | Actualizar producto (actualización parcial permitida) |
 | DELETE | `/api/products/{id}` | Eliminar producto (borrado lógico; conserva sus precios) |
-| GET | `/api/products/trashed` | Listar productos eliminados (paginado, mismo formato que el listado) |
+| GET | `/api/products/trashed` | Listar productos eliminados (mismo formato y mismos filtros que el listado) |
 | POST | `/api/products/{id}/restore` | Restaurar un producto eliminado (409 si no está eliminado) |
 | DELETE | `/api/products/{id}/force` | Borrar definitivamente un producto eliminado y sus precios (409 si está activo) |
 | GET | `/api/products/{id}/prices` | Listar precios del producto |
@@ -80,6 +80,24 @@ Accept: application/json
 | GET | `/api/currencies/{id}` | Obtener una divisa |
 | PUT | `/api/currencies/{id}` | Actualizar divisa (actualización parcial permitida) |
 | DELETE | `/api/currencies/{id}` | Eliminar divisa (409 si está en uso) |
+
+### Filtros, búsqueda y orden
+
+`GET /api/products` y `GET /api/products/trashed` aceptan estos parámetros opcionales:
+
+| Parámetro | Descripción |
+|---|---|
+| `search` | Coincidencia parcial en `name` o `description`, sin distinguir mayúsculas |
+| `currency` | Código de la divisa base (`USD`, `usd`…), sin distinguir mayúsculas |
+| `min_price` / `max_price` | Rango sobre `price`, límites incluidos (`min_price` ≤ `max_price`) |
+| `sort` | `name`, `price` o `created_at`; prefijo `-` para descendente (`-price`). Por defecto, los más recientes primero (en `trashed`, los eliminados más recientemente) |
+| `page` / `per_page` | Paginación; `per_page` entre 1 y 100 (por defecto 15) |
+
+Los parámetros inválidos responden 422, y los enlaces de paginación (`links`) conservan los filtros.
+
+```http
+GET /api/products?search=laptop&currency=usd&min_price=100&max_price=2000&sort=-price&per_page=10
+```
 
 ### Crear producto
 
@@ -134,7 +152,7 @@ La colección de Postman está en `docs/products-api.postman_collection.json`. L
 php artisan test
 ```
 
-Cubren autenticación, autorización por rol (403 para viewer en acciones de escritura), CRUD de productos y divisas, validaciones (incluida la normalización del código de divisa y la tasa mayor que 0), 404, registro de precios (manual y calculado), divisas duplicadas, borrado lógico, listado de eliminados, restauración y borrado definitivo (con su cascada y sus 409), y el 409 al eliminar una divisa en uso, incluso si solo la usan productos eliminados.
+Cubren autenticación, autorización por rol (403 para viewer en acciones de escritura), CRUD de productos y divisas, validaciones (incluida la normalización del código de divisa y la tasa mayor que 0), 404, registro de precios (manual y calculado), divisas duplicadas, filtros, búsqueda y orden del listado (incluidos sus 422 y los enlaces de paginación), borrado lógico, listado de eliminados, restauración y borrado definitivo (con su cascada y sus 409), y el 409 al eliminar una divisa en uso, incluso si solo la usan productos eliminados.
 
 ## Decisiones de diseño
 
@@ -144,6 +162,8 @@ Cubren autenticación, autorización por rol (403 para viewer en acciones de esc
 - **Soft deletes en productos:** `DELETE /api/products/{id}` hace un borrado lógico (`deleted_at`). El producto deja de aparecer en el listado, en el detalle y en sus precios (404), pero sus precios se conservan para poder restaurarlo. El borrado definitivo (`/force`) solo acepta productos ya eliminados (si no, 409), lo que obliga a un proceso en dos pasos; ahí la cascada de la base de datos (`cascadeOnDelete`) elimina sus precios. Restaurar un producto que no está eliminado responde 409.
 - **Eliminación de divisas:** una divisa en uso por productos (incluidos los eliminados lógicamente, que siguen referenciándola en la BD) o por precios no se puede eliminar: la API lo comprueba antes y responde 409 en JSON, y la llave foránea (`restrictOnDelete`) actúa como respaldo; si se viola por una condición de carrera, también se responde 409 en lugar de 500.
 - **Cambio de tasa:** actualizar el `exchange_rate` de una divisa no recalcula los precios ya registrados.
+- **Filtros del listado:** se implementan como local scopes de `Product` (`#[Scope]`: `search`, `ofCurrency`, `priceBetween`, `sortBy` y `filter`, que los combina), compartidos por el listado y por `trashed`. `sort` usa una lista blanca (`Product::SORTABLE`) y desempata por `id` para que la paginación sea estable.
+- **Búsqueda portable:** `search` usa `whereLike(..., caseSensitive: false)` de Laravel, que genera `ilike` en PostgreSQL y `like` en MySQL y SQLite, así que no distingue mayúsculas en los tres motores. Limitaciones conocidas: `%` y `_` en el texto actúan como comodines (solo amplían los resultados; el valor siempre va como binding), y en SQLite la insensibilidad a mayúsculas aplica solo a caracteres ASCII.
 - **Montos:** columnas `decimal(12,2)` para dinero y `decimal(18,6)` para la tasa de cambio, para evitar errores de precisión de los `float`.
 
 ## Seguridad
