@@ -7,6 +7,7 @@ use App\Http\Requests\StoreProductPriceRequest;
 use App\Http\Resources\ProductPriceResource;
 use App\Models\Currency;
 use App\Models\Product;
+use App\Models\ProductPrice;
 use App\Services\PriceConverter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -21,6 +22,7 @@ class ProductPriceController extends Controller implements HasMiddleware
         return [
             new Middleware('can:view,product', only: ['index']),
             new Middleware('can:createPrice,product', only: ['store']),
+            new Middleware('can:deletePrice,product', only: ['destroy']),
         ];
     }
 
@@ -45,5 +47,12 @@ class ProductPriceController extends Controller implements HasMiddleware
         return (new ProductPriceResource($productPrice))
             ->response()
             ->setStatusCode(Response::HTTP_CREATED);
+    }
+
+    public function destroy(Product $product, ProductPrice $price): Response
+    {
+        $price->delete();
+
+        return response()->noContent();
     }
 }

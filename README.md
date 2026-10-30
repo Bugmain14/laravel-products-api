@@ -83,6 +83,7 @@ Accept: application/json
 | DELETE | `/api/products/{id}/force` | Borrar definitivamente un producto eliminado y sus precios (409 si está activo) |
 | GET | `/api/products/{id}/prices` | Listar precios del producto |
 | POST | `/api/products/{id}/prices` | Registrar precio en otra divisa |
+| DELETE | `/api/products/{id}/prices/{priceId}` | Eliminar un precio del producto (404 si el precio no pertenece al producto) |
 | GET | `/api/currencies` | Listar divisas (sin paginar, ordenadas por `name`) |
 | POST | `/api/currencies` | Crear divisa |
 | GET | `/api/currencies/{id}` | Obtener una divisa |
@@ -175,7 +176,7 @@ Cada precio indica su origen en el campo `origin`: `manual` (enviado en la petic
 |---|---|
 | 200 | Consulta o actualización exitosa |
 | 201 | Recurso creado |
-| 204 | Producto o divisa eliminados |
+| 204 | Producto, divisa o precio eliminados |
 | 401 | Sin token o token inválido |
 | 403 | El rol del usuario no permite la acción |
 | 404 | Recurso no encontrado |
@@ -193,7 +194,7 @@ La colección de Postman está en `docs/products-api.postman_collection.json`. L
 php artisan test
 ```
 
-Las pruebas unitarias (`tests/Unit`) cubren `PriceConverter`: conversión, misma divisa, redondeo, precio manual frente a calculado y un caso de montos grandes en el que `float` falla. Las de integración (`tests/Feature`) cubren autenticación, límites de peticiones, autorización por rol (403 para viewer en acciones de escritura), CRUD de productos y divisas, validaciones (incluida la normalización del código de divisa y la tasa mayor que 0), 404, registro de precios (manual y calculado), creación de un producto con sus precios en una sola petición (validaciones y rollback de la transacción), divisas duplicadas, filtros, búsqueda y orden del listado (incluidos sus 422 y los enlaces de paginación), borrado lógico, listado de eliminados, restauración y borrado definitivo (con su cascada y sus 409), el 409 al eliminar una divisa en uso, incluso si solo la usan productos eliminados, y el recálculo automático de precios (despacho del job solo cuando cambia la tasa, el precio o la divisa base; precios manuales intactos; idempotencia; cambio de divisa base con precio calculado o manual).
+Las pruebas unitarias (`tests/Unit`) cubren `PriceConverter`: conversión, misma divisa, redondeo, precio manual frente a calculado y un caso de montos grandes en el que `float` falla. Las de integración (`tests/Feature`) cubren autenticación, límites de peticiones, autorización por rol (403 para viewer en acciones de escritura), CRUD de productos y divisas, validaciones (incluida la normalización del código de divisa y la tasa mayor que 0), 404, registro de precios (manual y calculado), eliminación de precios (incluido el 404 para un precio de otro producto), creación de un producto con sus precios en una sola petición (validaciones y rollback de la transacción), divisas duplicadas, filtros, búsqueda y orden del listado (incluidos sus 422 y los enlaces de paginación), borrado lógico, listado de eliminados, restauración y borrado definitivo (con su cascada y sus 409), el 409 al eliminar una divisa en uso, incluso si solo la usan productos eliminados, y el recálculo automático de precios (despacho del job solo cuando cambia la tasa, el precio o la divisa base; precios manuales intactos; idempotencia; cambio de divisa base con precio calculado o manual, y el flujo completo de eliminar el precio manual para poder cambiarla).
 
 ## Decisiones de diseño
 
@@ -206,7 +207,7 @@ Las pruebas unitarias (`tests/Unit`) cubren `PriceConverter`: conversión, misma
 - **Eliminación de divisas:** una divisa en uso por productos (incluidos los eliminados lógicamente, que siguen referenciándola en la BD) o por precios no se puede eliminar: la API lo comprueba antes y responde 409 en JSON, y la llave foránea (`restrictOnDelete`) actúa como respaldo; si se viola por una condición de carrera, también se responde 409 en lugar de 500.
 - **Recálculo automático:** `CurrencyObserver` y `ProductObserver` (registrados con `#[ObservedBy]`) despachan un job en cola solo si el campo realmente cambió (`wasChanged`): `RecalculateCurrencyPrices` cuando cambia el `exchange_rate` (recalcula los precios en esa divisa y los de productos cuya divisa base es esa) y `RecalculateProductPrices` cuando cambia el `price` o el `currency_id` de un producto. Solo se tocan los precios `calculated`, incluidos los de productos eliminados lógicamente, para que al restaurarlos estén al día. Se eligieron observers en lugar de Event + Listener porque el disparador es el ciclo de vida del modelo y así funciona con cualquier actualización, no solo con la API.
 - **Jobs idempotentes:** los jobs solo guardan el ID y recalculan con los valores vigentes al ejecutarse, así que repetirlos da el mismo resultado (y Eloquent no escribe si el valor no cambió). Usan `afterCommit` para no leer datos sin confirmar y `ShouldBeUniqueUntilProcessing` para no encolar el mismo recálculo varias veces sin perder un cambio que llegue mientras uno se ejecuta.
-- **Cambio de divisa base:** si la nueva divisa base de un producto coincide con uno de sus precios, ese precio sobra porque el `price` del producto pasa a ser su valor en esa divisa. Si el precio es `calculated`, se elimina en la misma transacción de la actualización; si es `manual`, la actualización se rechaza con 422 y no se aplica ningún cambio, para no perder un precio comercial sin que el usuario lo decida. Por la misma regla, `POST /api/products/{id}/prices` no acepta la divisa base.
+- **Cambio de divisa base:** si la nueva divisa base de un producto coincide con uno de sus precios, ese precio sobra porque el `price` del producto pasa a ser su valor en esa divisa. Si el precio es `calculated`, se elimina en la misma transacción de la actualización; si es `manual`, la actualización se rechaza con 422 y no se aplica ningún cambio, para no perder un precio comercial sin que el usuario lo decida. Para continuar, se elimina ese precio con `DELETE /api/products/{id}/prices/{priceId}` (ruta con `scopeBindings()`, así que un precio de otro producto responde 404) y se repite la actualización. Por la misma regla, `POST /api/products/{id}/prices` no acepta la divisa base.
 - **Filtros del listado:** se implementan como local scopes de `Product` (`#[Scope]`: `search`, `ofCurrency`, `priceBetween`, `sortBy` y `filter`, que los combina), compartidos por el listado y por `trashed`. `sort` usa una lista blanca (`Product::SORTABLE`) y desempata por `id` para que la paginación sea estable.
 - **Búsqueda portable:** `search` usa `whereLike(..., caseSensitive: false)` de Laravel, que genera `ilike` en PostgreSQL y `like` en MySQL y SQLite, así que no distingue mayúsculas en los tres motores. Limitaciones conocidas: `%` y `_` en el texto actúan como comodines (solo amplían los resultados; el valor siempre va como binding), y en SQLite la insensibilidad a mayúsculas aplica solo a caracteres ASCII.
 - **Creación atómica con precios:** la lógica vive en la clase de acción `App\Actions\CreateProductWithPrices`, que el controlador recibe por inyección. Crea el producto y sus precios dentro de `DB::transaction()`: si falla cualquier precio, no queda ni el producto ni ningún precio. La decisión "precio manual o calculado" está en un único lugar, `PriceConverter::priceFor()`, que usan tanto esta acción como `POST /api/products/{id}/prices`.
@@ -221,7 +222,7 @@ Las pruebas unitarias (`tests/Unit`) cubren `PriceConverter`: conversión, misma
   |---|---|---|
   | Listar y ver productos y sus precios | ✓ | ✓ |
   | Crear, actualizar y eliminar productos | ✓ | 403 |
-  | Registrar precios en otra divisa | ✓ | 403 |
+  | Registrar y eliminar precios en otras divisas | ✓ | 403 |
   | Listar eliminados, restaurar y borrar definitivamente productos | ✓ | 403 |
   | Listar y ver divisas | ✓ | ✓ |
   | Crear, actualizar y eliminar divisas | ✓ | 403 |

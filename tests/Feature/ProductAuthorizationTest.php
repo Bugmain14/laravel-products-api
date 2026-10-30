@@ -96,6 +96,17 @@ class ProductAuthorizationTest extends TestCase
         $this->assertNotSoftDeleted('products', ['id' => $this->product->id]);
     }
 
+    public function test_viewer_cannot_delete_a_price(): void
+    {
+        $price = $this->product->prices()->create(['currency_id' => $this->cop->id, 'price' => 400000]);
+
+        $this->deleteJson("/api/products/{$this->product->id}/prices/{$price->id}")
+            ->assertForbidden()
+            ->assertJson(['message' => 'This action is unauthorized.']);
+
+        $this->assertDatabaseHas('product_prices', ['id' => $price->id]);
+    }
+
     public function test_viewer_cannot_register_a_price(): void
     {
         $this->postJson("/api/products/{$this->product->id}/prices", [

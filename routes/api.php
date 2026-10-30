@@ -19,6 +19,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     Route::get('/products/{product}/prices', [ProductPriceController::class, 'index']);
     Route::post('/products/{product}/prices', [ProductPriceController::class, 'store']);
+    Route::delete('/products/{product}/prices/{price}', [ProductPriceController::class, 'destroy'])->scopeBindings();
 
     Route::apiResource('currencies', CurrencyController::class);
 });

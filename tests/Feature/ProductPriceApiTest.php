@@ -100,6 +100,32 @@ class ProductPriceApiTest extends TestCase
             ->assertJsonValidationErrors(['price']);
     }
 
+    public function test_it_deletes_a_price(): void
+    {
+        $price = $this->product->prices()->create(['currency_id' => $this->cop->id, 'price' => 400000]);
+
+        $this->deleteJson("/api/products/{$this->product->id}/prices/{$price->id}")->assertNoContent();
+
+        $this->assertDatabaseMissing('product_prices', ['id' => $price->id]);
+    }
+
+    public function test_it_returns_404_when_the_price_belongs_to_another_product(): void
+    {
+        $other = Product::factory()->create(['currency_id' => $this->usd->id]);
+        $price = $other->prices()->create(['currency_id' => $this->cop->id, 'price' => 400000]);
+
+        $this->deleteJson("/api/products/{$this->product->id}/prices/{$price->id}")
+            ->assertNotFound()
+            ->assertJson(['message' => 'Resource not found.']);
+
+        $this->assertDatabaseHas('product_prices', ['id' => $price->id]);
+    }
+
+    public function test_it_returns_404_for_a_missing_price(): void
+    {
+        $this->deleteJson("/api/products/{$this->product->id}/prices/999")->assertNotFound();
+    }
+
     public function test_it_lists_the_prices_of_a_product(): void
     {
         $this->product->prices()->create(['currency_id' => $this->cop->id, 'price' => 400000]);

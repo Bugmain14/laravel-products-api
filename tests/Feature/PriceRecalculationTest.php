@@ -179,6 +179,27 @@ class PriceRecalculationTest extends TestCase
         Queue::assertNothingPushed();
     }
 
+    public function test_deleting_the_manual_price_unblocks_the_base_currency_change(): void
+    {
+        $payload = ['currency_id' => $this->eur->id, 'price' => 90];
+        $manual = $this->priceOf($this->laptop, $this->eur);
+
+        $this->putJson("/api/products/{$this->laptop->id}", $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['currency_id']);
+
+        $this->deleteJson("/api/products/{$this->laptop->id}/prices/{$manual->id}")->assertNoContent();
+
+        $this->putJson("/api/products/{$this->laptop->id}", $payload)
+            ->assertOk()
+            ->assertJsonPath('data.currency.name', 'EUR')
+            ->assertJsonPath('data.price', '90.00');
+
+        $this->assertNull($this->priceOf($this->laptop, $this->eur));
+        $this->assertSame('391304.35', $this->priceOf($this->laptop, $this->cop)->price);
+        $this->assertSame('1809.78', $this->priceOf($this->laptop, $this->mxn)->price);
+    }
+
     public function test_creation_endpoints_store_the_price_origin(): void
     {
         $response = $this->postJson('/api/products', [
