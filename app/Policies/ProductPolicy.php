@@ -32,6 +32,21 @@ class ProductPolicy
         return $user->isAdmin();
     }
 
+    public function viewTrashed(User $user): bool
+    {
+        return $user->isAdmin();
+    }
+
+    public function restore(User $user, Product $product): bool
+    {
+        return $user->isAdmin();
+    }
+
+    public function forceDelete(User $user, Product $product): bool
+    {
+        return $user->isAdmin();
+    }
+
     public function createPrice(User $user, Product $product): bool
     {
         return $user->isAdmin();

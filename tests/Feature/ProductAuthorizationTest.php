@@ -93,7 +93,7 @@ class ProductAuthorizationTest extends TestCase
             ->assertForbidden()
             ->assertJson(['message' => 'This action is unauthorized.']);
 
-        $this->assertDatabaseHas('products', ['id' => $this->product->id]);
+        $this->assertNotSoftDeleted('products', ['id' => $this->product->id]);
     }
 
     public function test_viewer_cannot_register_a_price(): void

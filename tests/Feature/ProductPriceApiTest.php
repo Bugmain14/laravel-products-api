@@ -71,12 +71,12 @@ class ProductPriceApiTest extends TestCase
             ->assertJsonPath('data.0.currency.name', 'COP');
     }
 
-    public function test_deleting_a_product_removes_its_prices(): void
+    public function test_soft_deleting_a_product_keeps_its_prices(): void
     {
         $this->product->prices()->create(['currency_id' => $this->cop->id, 'price' => 400000]);
 
         $this->deleteJson("/api/products/{$this->product->id}")->assertNoContent();
 
-        $this->assertDatabaseMissing('product_prices', ['product_id' => $this->product->id]);
+        $this->assertDatabaseHas('product_prices', ['product_id' => $this->product->id, 'currency_id' => $this->cop->id]);
     }
 }

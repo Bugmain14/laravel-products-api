@@ -176,6 +176,19 @@ class CurrencyApiTest extends TestCase
         $this->assertDatabaseHas('currencies', ['id' => $cop->id]);
     }
 
+    public function test_it_returns_409_when_deleting_a_currency_used_only_by_a_soft_deleted_product(): void
+    {
+        $this->actingAsAdmin();
+        $eur = Currency::create(['name' => 'EUR', 'symbol' => '€', 'exchange_rate' => 0.92]);
+        Product::factory()->create(['currency_id' => $eur->id])->delete();
+
+        $this->deleteJson("/api/currencies/{$eur->id}")
+            ->assertStatus(409)
+            ->assertJson(['message' => 'The currency is in use by products or product prices and cannot be deleted.']);
+
+        $this->assertDatabaseHas('currencies', ['id' => $eur->id]);
+    }
+
     public function test_viewer_cannot_create_a_currency(): void
     {
         $this->actingAsViewer();

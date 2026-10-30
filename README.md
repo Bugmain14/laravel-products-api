@@ -69,7 +69,10 @@ Accept: application/json
 | POST | `/api/products` | Crear producto |
 | GET | `/api/products/{id}` | Obtener un producto con sus precios |
 | PUT | `/api/products/{id}` | Actualizar producto (actualización parcial permitida) |
-| DELETE | `/api/products/{id}` | Eliminar producto y sus precios |
+| DELETE | `/api/products/{id}` | Eliminar producto (borrado lógico; conserva sus precios) |
+| GET | `/api/products/trashed` | Listar productos eliminados (paginado, mismo formato que el listado) |
+| POST | `/api/products/{id}/restore` | Restaurar un producto eliminado (409 si no está eliminado) |
+| DELETE | `/api/products/{id}/force` | Borrar definitivamente un producto eliminado y sus precios (409 si está activo) |
 | GET | `/api/products/{id}/prices` | Listar precios del producto |
 | POST | `/api/products/{id}/prices` | Registrar precio en otra divisa |
 | GET | `/api/currencies` | Listar divisas (sin paginar, ordenadas por `name`) |
@@ -117,7 +120,7 @@ Accept: application/json
 | 401 | Sin token o token inválido |
 | 403 | El rol del usuario no permite la acción |
 | 404 | Recurso no encontrado |
-| 409 | La divisa está en uso por productos o precios y no se puede eliminar |
+| 409 | Divisa en uso que no se puede eliminar, restaurar un producto que no está eliminado o borrar definitivamente un producto activo |
 | 422 | Error de validación |
 | 429 | Demasiadas peticiones |
 
@@ -131,14 +134,15 @@ La colección de Postman está en `docs/products-api.postman_collection.json`. L
 php artisan test
 ```
 
-Cubren autenticación, autorización por rol (403 para viewer en acciones de escritura), CRUD de productos y divisas, validaciones (incluida la normalización del código de divisa y la tasa mayor que 0), 404, registro de precios (manual y calculado), divisas duplicadas, eliminación en cascada y el 409 al eliminar una divisa en uso.
+Cubren autenticación, autorización por rol (403 para viewer en acciones de escritura), CRUD de productos y divisas, validaciones (incluida la normalización del código de divisa y la tasa mayor que 0), 404, registro de precios (manual y calculado), divisas duplicadas, borrado lógico, listado de eliminados, restauración y borrado definitivo (con su cascada y sus 409), y el 409 al eliminar una divisa en uso, incluso si solo la usan productos eliminados.
 
 ## Decisiones de diseño
 
 - **Tasa de cambio:** `exchange_rate` indica cuántas unidades de la divisa equivalen a 1 unidad de la divisa de referencia (USD = 1). Para convertir de la divisa A a la B: `precio / tasa_A × tasa_B`, redondeado a 2 decimales.
 - **Precio en otra divisa:** si se envía `price`, se respeta ese valor (precio comercial definido por el negocio). Si no, se calcula a partir del precio base y las tasas de cambio.
 - **Un precio por divisa:** un producto no puede tener dos precios en la misma divisa (índice único `product_id + currency_id` y validación con respuesta 422).
-- **Eliminación:** al eliminar un producto se eliminan sus precios (`cascadeOnDelete`). Una divisa en uso por productos o precios no se puede eliminar: la API lo comprueba antes y responde 409 en JSON, y la llave foránea (`restrictOnDelete`) actúa como respaldo; si se viola por una condición de carrera, también se responde 409 en lugar de 500.
+- **Soft deletes en productos:** `DELETE /api/products/{id}` hace un borrado lógico (`deleted_at`). El producto deja de aparecer en el listado, en el detalle y en sus precios (404), pero sus precios se conservan para poder restaurarlo. El borrado definitivo (`/force`) solo acepta productos ya eliminados (si no, 409), lo que obliga a un proceso en dos pasos; ahí la cascada de la base de datos (`cascadeOnDelete`) elimina sus precios. Restaurar un producto que no está eliminado responde 409.
+- **Eliminación de divisas:** una divisa en uso por productos (incluidos los eliminados lógicamente, que siguen referenciándola en la BD) o por precios no se puede eliminar: la API lo comprueba antes y responde 409 en JSON, y la llave foránea (`restrictOnDelete`) actúa como respaldo; si se viola por una condición de carrera, también se responde 409 en lugar de 500.
 - **Cambio de tasa:** actualizar el `exchange_rate` de una divisa no recalcula los precios ya registrados.
 - **Montos:** columnas `decimal(12,2)` para dinero y `decimal(18,6)` para la tasa de cambio, para evitar errores de precisión de los `float`.
 
@@ -152,6 +156,7 @@ Cubren autenticación, autorización por rol (403 para viewer en acciones de esc
   | Listar y ver productos y sus precios | ✓ | ✓ |
   | Crear, actualizar y eliminar productos | ✓ | 403 |
   | Registrar precios en otra divisa | ✓ | 403 |
+  | Listar eliminados, restaurar y borrar definitivamente productos | ✓ | 403 |
   | Listar y ver divisas | ✓ | ✓ |
   | Crear, actualizar y eliminar divisas | ✓ | 403 |
 

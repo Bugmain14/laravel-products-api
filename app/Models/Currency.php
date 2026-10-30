@@ -31,6 +31,6 @@ class Currency extends Model
 
     public function isInUse(): bool
     {
-        return $this->products()->exists() || $this->productPrices()->exists();
+        return $this->products()->withTrashed()->exists() || $this->productPrices()->exists();
     }
 }
